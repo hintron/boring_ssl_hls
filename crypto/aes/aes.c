@@ -6,7 +6,7 @@
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer. 
+ *    notice, this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
@@ -46,9 +46,31 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  * ==================================================================== */
 
+
+// This code has been modified by Michael Hinton in order to work with
+// Vivado HLS
+
+// Changelog:
+// *Commented out OPENSSL_NO_ASM macro, as well as code outside of it
+// *Commented out pointer comparison (!key || !aeskey)
+//
+
+
+
+// ERROR: [SYNCHK 200-11] ../../../../../../../../crypto/boringssl/crypto/aes/aes.c:537: Argument 'aeskey' of function 'AES_set_encrypt_key' (../../../../../../../../crypto/boringssl/crypto/aes/aes.c:537) has an unsynthesizable type (possible cause(s): structure variable cannot be decomposed due to (1) unsupported type conversion; (2) memory copy operation; (3) function pointer used in struct; (4) unsupported pointer comparison).
+// ERROR: [SYNCHK 200-42] ../../../../../../../../crypto/boringssl/crypto/aes/aes.c:542: pointer comparison is not supported.
+// ERROR: [SYNCHK 200-61] ../../../../../../../../crypto/boringssl/crypto/aes/aes.c:562: unsupported memory access on variable 'key' which is (or contains) an array with unknown size at compile time.
+
+
+// TODO: In order to get it to synthesize in HLS, make the key inputs be an array input
+// of known size rather than a pointer of unknown size (fix the key to 256, or set it as a MACRO)
+//
+//
+
+
 #include <openssl/aes.h>
 
-#include <assert.h>
+// #include <assert.h>
 #include <stdlib.h>
 
 #include <openssl/cpu.h>
@@ -56,8 +78,8 @@
 #include "internal.h"
 
 
-#if defined(OPENSSL_NO_ASM) || \
-    (!defined(OPENSSL_X86) && !defined(OPENSSL_X86_64) && !defined(OPENSSL_ARM))
+// #if defined(OPENSSL_NO_ASM) || \
+//     (!defined(OPENSSL_X86) && !defined(OPENSSL_X86_64) && !defined(OPENSSL_ARM))
 
 /* Te0[x] = S [x].[02, 01, 01, 03];
  * Te1[x] = S [x].[03, 02, 01, 01];
@@ -539,9 +561,12 @@ int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   int i = 0;
   uint32_t temp;
 
-  if (!key || !aeskey) {
-    return -1;
-  }
+  // MGH TODO: Use bits to determine the size of key and cast to an array. Will that satisfy HLS?
+
+  // MGH: HLS does not like pointer comparisons... omit
+  // if (!key || !aeskey) {
+  //   return -1;
+  // }
 
   switch (bits) {
     case 128:
@@ -684,7 +709,7 @@ void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   int r;
 #endif /* ?FULL_UNROLL */
 
-  assert(in && out && key);
+  // assert(in && out && key);
   rk = key->rd_key;
 
   /* map byte array block to cipher state
@@ -872,7 +897,7 @@ void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   int r;
 #endif /* ?FULL_UNROLL */
 
-  assert(in && out && key);
+  // assert(in && out && key);
   rk = key->rd_key;
 
   /* map byte array block to cipher state
@@ -1058,85 +1083,87 @@ void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   PUTU32(out + 12, s3);
 }
 
-#else
+// Comment out custom hardware AES stuff
 
-#if defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
+// #else   /* OPENSSL_NO_ASM || (!OPENSSL_X86 && !OPENSSL_X86_64 && !OPENSSL_ARM) */
 
-static int hwaes_capable(void) {
-  return CRYPTO_is_ARMv8_AES_capable();
-}
+// #if defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
 
-int aes_hw_set_encrypt_key(const uint8_t *user_key, const int bits,
-                           AES_KEY *key);
-int aes_hw_set_decrypt_key(const uint8_t *user_key, const int bits,
-                           AES_KEY *key);
-void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+// static int hwaes_capable(void) {
+//   return CRYPTO_is_ARMv8_AES_capable();
+// }
 
-#else
+// int aes_hw_set_encrypt_key(const uint8_t *user_key, const int bits,
+//                            AES_KEY *key);
+// int aes_hw_set_decrypt_key(const uint8_t *user_key, const int bits,
+//                            AES_KEY *key);
+// void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+// void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
 
-static int hwaes_capable(void) {
-  return 0;
-}
+// #else /* defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64) */
 
-static int aes_hw_set_encrypt_key(const uint8_t *user_key, int bits, AES_KEY *key) {
-  abort();
-}
+// static int hwaes_capable(void) {
+//   return 0;
+// }
 
-static int aes_hw_set_decrypt_key(const uint8_t *user_key, int bits, AES_KEY *key) {
-  abort();
-}
+// static int aes_hw_set_encrypt_key(const uint8_t *user_key, int bits, AES_KEY *key) {
+//   abort();
+// }
 
-static void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
-  abort();
-}
+// static int aes_hw_set_decrypt_key(const uint8_t *user_key, int bits, AES_KEY *key) {
+//   abort();
+// }
 
-static void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
-  abort();
-}
+// static void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+//   abort();
+// }
 
-#endif
+// static void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+//   abort();
+// }
+
+// #endif /* defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64) */
 
 
-/* In this case several functions are provided by asm code. However, one cannot
- * control asm symbol visibility with command line flags and such so they are
- * always hidden and wrapped by these C functions, which can be so
- * controlled. */
+//  In this case several functions are provided by asm code. However, one cannot
+//  * control asm symbol visibility with command line flags and such so they are
+//  * always hidden and wrapped by these C functions, which can be so
+//  * controlled.
 
-void asm_AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
-  if (hwaes_capable()) {
-    aes_hw_encrypt(in, out, key);
-  } else {
-    asm_AES_encrypt(in, out, key);
-  }
-}
+// void asm_AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+// void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+//   if (hwaes_capable()) {
+//     aes_hw_encrypt(in, out, key);
+//   } else {
+//     asm_AES_encrypt(in, out, key);
+//   }
+// }
 
-void asm_AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
-  if (hwaes_capable()) {
-    aes_hw_decrypt(in, out, key);
-  } else {
-    asm_AES_decrypt(in, out, key);
-  }
-}
+// void asm_AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+// void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+//   if (hwaes_capable()) {
+//     aes_hw_decrypt(in, out, key);
+//   } else {
+//     asm_AES_decrypt(in, out, key);
+//   }
+// }
 
-int asm_AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
-int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
-  if (hwaes_capable()) {
-    return aes_hw_set_encrypt_key(key, bits, aeskey);
-  } else {
-    return asm_AES_set_encrypt_key(key, bits, aeskey);
-  }
-}
+// int asm_AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
+// int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
+//   if (hwaes_capable()) {
+//     return aes_hw_set_encrypt_key(key, bits, aeskey);
+//   } else {
+//     return asm_AES_set_encrypt_key(key, bits, aeskey);
+//   }
+// }
 
-int asm_AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
-int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
-  if (hwaes_capable()) {
-    return aes_hw_set_decrypt_key(key, bits, aeskey);
-  } else {
-    return asm_AES_set_decrypt_key(key, bits, aeskey);
-  }
-}
+// int asm_AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
+// int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
+//   if (hwaes_capable()) {
+//     return aes_hw_set_decrypt_key(key, bits, aeskey);
+//   } else {
+//     return asm_AES_set_decrypt_key(key, bits, aeskey);
+//   }
+// }
 
-#endif  /* OPENSSL_NO_ASM || (!OPENSSL_X86 && !OPENSSL_X86_64 && !OPENSSL_ARM) */
+// #endif  /* OPENSSL_NO_ASM || (!OPENSSL_X86 && !OPENSSL_X86_64 && !OPENSSL_ARM) */
