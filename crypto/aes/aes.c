@@ -556,7 +556,10 @@ static const uint32_t rcon[] = {
     /* for 128-bit blocks, Rijndael never uses more than 10 rcon values */
 };
 
-int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
+
+
+
+int AES_set_encrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   uint32_t *rk;
   int i = 0;
   uint32_t temp;
@@ -654,7 +657,7 @@ int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   return 0;
 }
 
-int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
+int AES_set_decrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   uint32_t *rk;
   int i, j, status;
   uint32_t temp;
@@ -702,7 +705,7 @@ int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   return 0;
 }
 
-void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+void AES_encrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
   const uint32_t *rk;
   uint32_t s0, s1, s2, s3, t0, t1, t2, t3;
 #ifndef FULL_UNROLL
@@ -890,7 +893,7 @@ void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   PUTU32(out + 12, s3);
 }
 
-void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+void AES_decrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
   const uint32_t *rk;
   uint32_t s0, s1, s2, s3, t0, t1, t2, t3;
 #ifndef FULL_UNROLL
