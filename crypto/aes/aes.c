@@ -672,6 +672,8 @@ int AES_set_decrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
 
   /* invert the order of the round keys: */
   for (i = 0, j = 4 * aeskey->rounds; i < j; i += 4, j -= 4) {
+    // rounds can be 10, 12, or 14
+    #pragma HLS loop_tripcount min=5 max=7 avg=7
     temp = rk[i];
     rk[i] = rk[j];
     rk[j] = temp;
@@ -688,6 +690,8 @@ int AES_set_decrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   /* apply the inverse MixColumn transform to all round keys but the first and
    * the last: */
   for (i = 1; i < (int)aeskey->rounds; i++) {
+    // rounds can be 10, 12, or 14
+    #pragma HLS loop_tripcount min=9 max=13 avg=13
     rk += 4;
     rk[0] =
         Td0[Te1[(rk[0] >> 24)] & 0xff] ^ Td1[Te1[(rk[0] >> 16) & 0xff] & 0xff] ^
