@@ -62,15 +62,15 @@
 // ERROR: [SYNCHK 200-61] ../../../../../../../../crypto/boringssl/crypto/aes/aes.c:562: unsupported memory access on variable 'key' which is (or contains) an array with unknown size at compile time.
 
 
-// TODO: In order to get it to synthesize in HLS, make the key inputs be an array input
+// In order to get it to synthesize in HLS, the key inputs on an array input needs to be
 // of known size rather than a pointer of unknown size (fix the key to 256, or set it as a MACRO)
-//
-//
-
 
 #include <openssl/aes.h>
 
-// #include <assert.h>
+#ifndef HLS_SYNTHESIS
+    #include <assert.h>
+#endif
+
 #include <stdlib.h>
 
 #include <openssl/cpu.h>
@@ -78,8 +78,9 @@
 #include "internal.h"
 
 
-// #if defined(OPENSSL_NO_ASM) || \
-//     (!defined(OPENSSL_X86) && !defined(OPENSSL_X86_64) && !defined(OPENSSL_ARM))
+#if defined(HLS_SYNTHESIS) || defined(OPENSSL_NO_ASM) || \
+    (!defined(OPENSSL_X86) && !defined(OPENSSL_X86_64) && !defined(OPENSSL_ARM))
+
 
 /* Te0[x] = S [x].[02, 01, 01, 03];
  * Te1[x] = S [x].[03, 02, 01, 01];
@@ -564,12 +565,12 @@ int AES_set_encrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   int i = 0;
   uint32_t temp;
 
-  // MGH TODO: Use bits to determine the size of key and cast to an array. Will that satisfy HLS?
-
-  // MGH: HLS does not like pointer comparisons... omit
-  // if (!key || !aeskey) {
-  //   return -1;
-  // }
+  #ifndef HLS_SYNTHESIS
+      // MGH: HLS does not like pointer comparisons... omit
+      if (!key || !aeskey) {
+        return -1;
+      }
+  #endif
 
   switch (bits) {
     case 128:
@@ -672,8 +673,10 @@ int AES_set_decrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
 
   /* invert the order of the round keys: */
   for (i = 0, j = 4 * aeskey->rounds; i < j; i += 4, j -= 4) {
-    // rounds can be 10, 12, or 14
-    #pragma HLS loop_tripcount min=5 max=7 avg=7
+    #ifdef HLS_SYNTHESIS
+        // rounds can be 10, 12, or 14
+        #pragma HLS loop_tripcount min=5 max=7 avg=7
+    #endif
     temp = rk[i];
     rk[i] = rk[j];
     rk[j] = temp;
@@ -690,8 +693,10 @@ int AES_set_decrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   /* apply the inverse MixColumn transform to all round keys but the first and
    * the last: */
   for (i = 1; i < (int)aeskey->rounds; i++) {
-    // rounds can be 10, 12, or 14
-    #pragma HLS loop_tripcount min=9 max=13 avg=13
+    #ifdef HLS_SYNTHESIS
+        // rounds can be 10, 12, or 14
+        #pragma HLS loop_tripcount min=9 max=13 avg=13
+    #endif
     rk += 4;
     rk[0] =
         Td0[Te1[(rk[0] >> 24)] & 0xff] ^ Td1[Te1[(rk[0] >> 16) & 0xff] & 0xff] ^
@@ -716,7 +721,9 @@ void AES_encrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
   int r;
 #endif /* ?FULL_UNROLL */
 
-  // assert(in && out && key);
+  #ifndef HLS_SYNTHESIS
+    assert(in && out && key);
+  #endif
   rk = key->rd_key;
 
   /* map byte array block to cipher state
@@ -904,7 +911,9 @@ void AES_decrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
   int r;
 #endif /* ?FULL_UNROLL */
 
-  // assert(in && out && key);
+  #ifndef HLS_SYNTHESIS
+    assert(in && out && key);
+  #endif
   rk = key->rd_key;
 
   /* map byte array block to cipher state
@@ -1090,46 +1099,46 @@ void AES_decrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
   PUTU32(out + 12, s3);
 }
 
-// Comment out custom hardware AES stuff
 
-// #else   /* OPENSSL_NO_ASM || (!OPENSSL_X86 && !OPENSSL_X86_64 && !OPENSSL_ARM) */
+#else   /* HLS_SYNTHESIS || OPENSSL_NO_ASM || (!OPENSSL_X86 && !OPENSSL_X86_64 && !OPENSSL_ARM) */
 
-// #if defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
+#if defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
 
-// static int hwaes_capable(void) {
-//   return CRYPTO_is_ARMv8_AES_capable();
-// }
+static int hwaes_capable(void) {
+  return CRYPTO_is_ARMv8_AES_capable();
+}
 
-// int aes_hw_set_encrypt_key(const uint8_t *user_key, const int bits,
-//                            AES_KEY *key);
-// int aes_hw_set_decrypt_key(const uint8_t *user_key, const int bits,
-//                            AES_KEY *key);
-// void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-// void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+int aes_hw_set_encrypt_key(const uint8_t *user_key, const int bits,
+                           AES_KEY *key);
+int aes_hw_set_decrypt_key(const uint8_t *user_key, const int bits,
+                           AES_KEY *key);
+void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
 
-// #else /* defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64) */
+#else /* defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64) */
 
-// static int hwaes_capable(void) {
-//   return 0;
-// }
+static int hwaes_capable(void) {
+  return 0;
+}
 
-// static int aes_hw_set_encrypt_key(const uint8_t *user_key, int bits, AES_KEY *key) {
-//   abort();
-// }
+static int aes_hw_set_encrypt_key(const uint8_t *user_key, int bits, AES_KEY *key) {
+  abort();
+}
 
-// static int aes_hw_set_decrypt_key(const uint8_t *user_key, int bits, AES_KEY *key) {
-//   abort();
-// }
+static int aes_hw_set_decrypt_key(const uint8_t *user_key, int bits, AES_KEY *key) {
+  abort();
+}
 
-// static void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
-//   abort();
-// }
+static void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+  abort();
+}
 
-// static void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
-//   abort();
-// }
+static void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+  abort();
+}
 
-// #endif /* defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64) */
+#endif /* defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64) */
+
 
 
 //  In this case several functions are provided by asm code. However, one cannot
@@ -1137,40 +1146,40 @@ void AES_decrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
 //  * always hidden and wrapped by these C functions, which can be so
 //  * controlled.
 
-// void asm_AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-// void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
-//   if (hwaes_capable()) {
-//     aes_hw_encrypt(in, out, key);
-//   } else {
-//     asm_AES_encrypt(in, out, key);
-//   }
-// }
+void asm_AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+  if (hwaes_capable()) {
+    aes_hw_encrypt(in, out, key);
+  } else {
+    asm_AES_encrypt(in, out, key);
+  }
+}
 
-// void asm_AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-// void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
-//   if (hwaes_capable()) {
-//     aes_hw_decrypt(in, out, key);
-//   } else {
-//     asm_AES_decrypt(in, out, key);
-//   }
-// }
+void asm_AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+  if (hwaes_capable()) {
+    aes_hw_decrypt(in, out, key);
+  } else {
+    asm_AES_decrypt(in, out, key);
+  }
+}
 
-// int asm_AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
-// int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
-//   if (hwaes_capable()) {
-//     return aes_hw_set_encrypt_key(key, bits, aeskey);
-//   } else {
-//     return asm_AES_set_encrypt_key(key, bits, aeskey);
-//   }
-// }
+int asm_AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
+int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
+  if (hwaes_capable()) {
+    return aes_hw_set_encrypt_key(key, bits, aeskey);
+  } else {
+    return asm_AES_set_encrypt_key(key, bits, aeskey);
+  }
+}
 
-// int asm_AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
-// int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
-//   if (hwaes_capable()) {
-//     return aes_hw_set_decrypt_key(key, bits, aeskey);
-//   } else {
-//     return asm_AES_set_decrypt_key(key, bits, aeskey);
-//   }
-// }
+int asm_AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
+int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
+  if (hwaes_capable()) {
+    return aes_hw_set_decrypt_key(key, bits, aeskey);
+  } else {
+    return asm_AES_set_decrypt_key(key, bits, aeskey);
+  }
+}
 
-// #endif  /* OPENSSL_NO_ASM || (!OPENSSL_X86 && !OPENSSL_X86_64 && !OPENSSL_ARM) */
+#endif  /* HLS_SYNTHESIS || OPENSSL_NO_ASM || (!OPENSSL_X86 && !OPENSSL_X86_64 && !OPENSSL_ARM) */
