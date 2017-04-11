@@ -563,11 +563,15 @@ int AES_set_encrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   int i = 0;
   uint32_t temp;
 
-  /*MAG*/
-  #pragma HLS array_partition variable=key
-  /*MAG*/
+  #ifdef HLS_OPTIMIZED
+    /*MAG*/
+    #pragma HLS array_partition variable=key
+  #endif
 
-  #pragma AP PIPELINE II=4 enable_flush//MAG
+  #ifdef HLS_OPTIMIZED
+    /*MAG*/
+    #pragma AP PIPELINE II=4 enable_flush
+  #endif
 
 
   #ifndef HLS_SYNTHESIS
@@ -593,8 +597,10 @@ int AES_set_encrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
 
   rk = aeskey->rd_key;
 
-  #pragma HLS array_partition variable=rk //MAG
-
+  #ifdef HLS_OPTIMIZED
+    /*MAG*/
+    #pragma HLS array_partition variable=rk
+  #endif
   rk[0] = GETU32(key);
   rk[1] = GETU32(key + 4);
   rk[2] = GETU32(key + 8);
@@ -730,11 +736,11 @@ void AES_encrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
   int r;
 #endif /* ?FULL_UNROLL */
 
-  /*MAG*/
-  #pragma HLS array_partition variable=in
-  #pragma HLS array_partition variable=out
-  /*MAG*/
-
+  #ifdef HLS_OPTIMIZED
+    /*MAG*/
+    #pragma HLS array_partition variable=in
+    #pragma HLS array_partition variable=out
+  #endif
 
 
   #ifndef HLS_SYNTHESIS
