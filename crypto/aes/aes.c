@@ -558,12 +558,17 @@ static const uint32_t rcon[] = {
 };
 
 
-
-
 int AES_set_encrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   uint32_t *rk;
   int i = 0;
   uint32_t temp;
+
+  /*MAG*/
+  #pragma HLS array_partition variable=key
+  /*MAG*/
+
+  #pragma AP PIPELINE II=4 enable_flush//MAG
+
 
   #ifndef HLS_SYNTHESIS
       // MGH: HLS does not like pointer comparisons... omit
@@ -587,6 +592,8 @@ int AES_set_encrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   }
 
   rk = aeskey->rd_key;
+
+  #pragma HLS array_partition variable=rk //MAG
 
   rk[0] = GETU32(key);
   rk[1] = GETU32(key + 4);
@@ -632,6 +639,7 @@ int AES_set_encrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   rk[7] = GETU32(key + 28);
   if (bits == 256) {
     while (1) {
+
       temp = rk[7];
       rk[8] = rk[0] ^ (Te2[(temp >> 16) & 0xff] & 0xff000000) ^
               (Te3[(temp >> 8) & 0xff] & 0x00ff0000) ^
@@ -670,6 +678,7 @@ int AES_set_decrypt_key(const uint8_t key[32], unsigned bits, AES_KEY *aeskey) {
   }
 
   rk = aeskey->rd_key;
+
 
   /* invert the order of the round keys: */
   for (i = 0, j = 4 * aeskey->rounds; i < j; i += 4, j -= 4) {
@@ -720,6 +729,13 @@ void AES_encrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
 #ifndef FULL_UNROLL
   int r;
 #endif /* ?FULL_UNROLL */
+
+  /*MAG*/
+  #pragma HLS array_partition variable=in
+  #pragma HLS array_partition variable=out
+  /*MAG*/
+
+
 
   #ifndef HLS_SYNTHESIS
     assert(in && out && key);
@@ -859,6 +875,7 @@ void AES_encrypt(const uint8_t in[16], uint8_t out[16], const AES_KEY *key) {
   /*
    * Nr - 1 full rounds:
    */
+
   r = key->rounds >> 1;
   for (;;) {
     t0 = Te0[(s0 >> 24)] ^ Te1[(s1 >> 16) & 0xff] ^ Te2[(s2 >> 8) & 0xff] ^
